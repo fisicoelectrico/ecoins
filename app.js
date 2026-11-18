@@ -7,6 +7,7 @@ const TK = 'ec_token';
 
 const S = {
   token: localStorage.getItem(TK) || null,
+  loginPin: null,
   me: null,
   admin: null,
   cal: { year: null, month: null, tipo: 'dia', dias: [], sel: null, msg: '' },
@@ -34,6 +35,8 @@ const isLider = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.rol 
 const ERR = {
   SESION_INVALIDA: 'Tu sesión venció. Ingresa de nuevo.',
   CREDENCIALES: 'Cédula o PIN incorrectos.',
+  CEDULA_NO_REGISTRADA: 'Esa cédula no está registrada. Avísale a gerencia o subgerencia.',
+  PIN_ADMIN_REQUERIDO: 'Un administrador necesita PIN (4 a 6 números).',
   BLOQUEADO_TEMPORAL: 'Demasiados intentos. Espera 10 minutos.',
   NO_AUTORIZADO: 'No tienes permiso para esta acción.',
   PIN_ACTUAL_INCORRECTO: 'El PIN actual no es correcto.',
@@ -128,12 +131,12 @@ function salir(silencioso) {
 function vLogin() {
   return `<div class="login"><form class="card stack" id="f-login" autocomplete="on">
     <div class="brand" style="color:var(--ink)"><div class="logo">e</div>E-Coins <span class="small" style="font-family:Inter;font-weight:400">Eco Solar</span></div>
-    <div><h1>Ingresar</h1><p class="sub">Usa tu cédula y tu PIN.</p></div>
-    <label class="f">Cédula<input class="in" name="doc" inputmode="numeric" autocomplete="username" required></label>
-    <label class="f">PIN<input class="in" name="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" required></label>
+    <div><h1>${S.loginPin ? `Hola, ${esc(S.loginPin.nombre)}` : 'Ingresar'}</h1><p class="sub">${S.loginPin ? 'Tu cuenta es de administrador: escribe tu PIN.' : 'Escribe tu número de cédula.'}</p></div>
+    <label class="f">Cédula<input class="in" name="doc" inputmode="numeric" autocomplete="username" required value="${esc(S.loginPin ? S.loginPin.doc : '')}" ${S.loginPin ? 'readonly' : 'autofocus'}></label>
+    ${S.loginPin ? '<label class="f">PIN<input class="in" name="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" required autofocus></label>' : ''}
     <div class="err" id="login-err" role="alert"></div>
     <button class="btn block" type="submit">Entrar</button>
-    <p class="help">¿Olvidaste tu PIN? Pídele a gerencia o subgerencia que lo restablezca.</p>
+    ${S.loginPin ? '<button class="btn out block" type="button" data-act="otra-cedula">Usar otra cédula</button>' : '<p class="help">Si tu cédula no aparece, avísale a gerencia o subgerencia.</p>'}
   </form></div>`;
 }
 function vCambiarPin(forzado) {
@@ -168,7 +171,7 @@ function header() {
       ${isAdmin() ? `<span class="tab-sep" aria-hidden="true"></span>
         ${t('admin/saldos', 'Saldos y asignación')}${t('admin/solicitudes', 'Aprobar', pend ? ` <span class="badge">${pend}</span>` : '')}
         ${t('admin/registrar', 'Registrar mes')}${t('admin/calendario', 'Días y reglas')}${t('admin/personas', 'Personas')}${t('admin/historial', 'Historial')}` : ''}
-      ${t('pin', 'Cambiar PIN')}
+      ${isAdmin() ? t('pin', 'Cambiar PIN') : ''}
     </div></nav>`;
 }
 const rolTxt = (r) => ({ empleado: 'Empleado', lider: 'Líder', admin: 'Administrador' }[r] || r);
@@ -466,8 +469,8 @@ function vAdminPersonas() {
     <div class="row"><button class="btn out sm" data-act="import-personas">Cargar lista</button><button class="btn sm" data-act="persona-nueva">Agregar persona</button></div></div>
     <section class="card p0"><div class="tbl-wrap"><table style="min-width:640px"><thead><tr><th>Nombre</th><th>Cédula</th><th>Proceso</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>
       ${A.personas.map((p) => `<tr><td><b>${esc(p.nombre)}</b></td><td>${esc(p.documento)}</td><td>${esc(p.proceso)}</td><td>${esc(rolTxt(p.rol))}</td>
-        <td>${p.activo ? (p.debe_cambiar_pin ? '<span class="pill pend">PIN temporal</span>' : '<span class="pill ok">Activo</span>') : '<span class="pill can">Inactivo</span>'}</td>
-        <td class="n" style="white-space:nowrap"><button class="btn out sm" data-act="persona-editar" data-id="${p.id}">Editar</button> <button class="btn out sm" data-act="persona-pin" data-id="${p.id}">Nuevo PIN</button></td></tr>`).join('')}
+        <td>${p.activo ? (p.rol === 'admin' && p.debe_cambiar_pin ? '<span class="pill pend">PIN temporal</span>' : '<span class="pill ok">Activo</span>') : '<span class="pill can">Inactivo</span>'}</td>
+        <td class="n" style="white-space:nowrap"><button class="btn out sm" data-act="persona-editar" data-id="${p.id}">Editar</button>${p.rol === 'admin' ? ` <button class="btn out sm" data-act="persona-pin" data-id="${p.id}">Nuevo PIN</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div></section></main>`;
 }
 
@@ -526,8 +529,13 @@ document.addEventListener('submit', async (ev) => {
   if (f.id === 'f-login') {
     const err = $('#login-err'); err.textContent = '';
     await busy(btn, async () => {
-      const r = await rpc('ec_login', { p_documento: fd.get('doc'), p_pin: fd.get('pin') });
+      const doc = String(fd.get('doc') || '').replace(/[^0-9A-Za-z]/g, '');
+      const r = S.loginPin
+        ? await rpc('ec_login', { p_documento: doc, p_pin: fd.get('pin') })
+        : await rpc('ec_ingresar', { p_documento: doc });
       if (r.error) { err.textContent = traducir(r.error); return; }
+      if (r.requiere_pin) { S.loginPin = { doc, nombre: r.nombre }; render(); return; }
+      S.loginPin = null;
       S.token = r.token; localStorage.setItem(TK, r.token); S.me = null;
       location.hash = r.rol === 'admin' ? '#/admin/saldos' : '#/inicio';
       await render();
@@ -611,7 +619,7 @@ document.addEventListener('submit', async (ev) => {
     });
     await busy(btn, async () => {
       const r = await rpc('ec_admin_importar_personas', { p_token: S.token, p_filas: filas });
-      $('#imp-res').innerHTML = `<div class="okbox">${r.ok} personas creadas.</div>${r.errores.length ? `<div class="err">Errores: ${r.errores.map((e) => `fila ${e.fila}: ${esc(traducir(e.error))}`).join(' · ')}</div>` : ''}`;
+      $('#imp-res').innerHTML = `<div class="okbox">${r.ok} personas creadas · ${r.actualizadas || 0} actualizadas.</div>${r.errores.length ? `<div class="err">Errores: ${r.errores.map((e) => `fila ${e.fila}: ${esc(traducir(e.error))}`).join(' · ')}</div>` : ''}`;
       await refrescar();
     });
   } else if (f.id === 'f-dinero') {
@@ -653,6 +661,7 @@ document.addEventListener('click', async (ev) => {
   if (!el) return;
   const a = el.dataset.act;
   if (a === 'salir') { salir(false); }
+  else if (a === 'otra-cedula') { S.loginPin = null; render(); }
   else if (a === 'cerrar') { closeModal(); }
   else if (a === 'tipo') { S.cal.tipo = el.dataset.t; render(); }
   else if (a === 'mes') {
@@ -712,7 +721,7 @@ document.addEventListener('click', async (ev) => {
       <label class="f">Cédula (con ella ingresa)<input class="in" name="documento" required inputmode="numeric" value="${esc(p ? p.documento : '')}"></label>
       <label class="f">Proceso<input class="in" name="proceso" list="dl-proc" required value="${esc(p ? p.proceso : '')}"><datalist id="dl-proc">${procesos().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
       <label class="f">Rol<select class="in" name="rol">${['empleado', 'lider', 'admin'].map((r) => `<option value="${r}" ${p && p.rol === r ? 'selected' : ''}>${rolTxt(r)}</option>`).join('')}</select></label>
-      ${p ? '' : '<label class="f">PIN temporal (4 a 6 números)<input class="in" name="pin" inputmode="numeric" maxlength="6" required pattern="[0-9]{4,6}"><span class="help">Se le pedirá cambiarlo al entrar.</span></label>'}
+      <label class="f">PIN (solo para administradores)<input class="in" name="pin" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}"><span class="help">Empleados y líderes entran solo con la cédula. Un administrador nuevo necesita PIN temporal.</span></label>
       <label class="check"><input type="checkbox" name="activo" ${!p || p.activo ? 'checked' : ''}><span>Activo</span></label>
       <div class="row"><button class="btn" type="submit">Guardar</button><button class="btn out" type="button" data-act="cerrar">Cancelar</button></div></form>`);
   } else if (a === 'persona-pin') {
@@ -721,8 +730,8 @@ document.addEventListener('click', async (ev) => {
       <p class="help" style="margin:0">Cierra sus sesiones abiertas y le pedirá cambiarlo al entrar.</p>
       <div class="row"><button class="btn" type="submit">Asignar PIN</button><button class="btn out" type="button" data-act="cerrar">Cancelar</button></div></form>`);
   } else if (a === 'import-personas') {
-    modal(`<h2>Cargar lista de personas</h2><p class="help" style="margin:0">Pega desde Excel una persona por línea con columnas: <b>nombre; cédula; proceso; rol; PIN temporal</b>. Rol: empleado, lider o admin.</p>
-      <form class="stack" id="f-import-personas"><textarea class="in" name="lista" rows="8" placeholder="Laura Gómez;1012345678;Ingeniería y diseño;empleado;4821" required></textarea>
+    modal(`<h2>Cargar lista de personas</h2><p class="help" style="margin:0">Pega desde Excel una persona por línea con columnas: <b>nombre; cédula; proceso; rol</b>. Rol: empleado, lider o admin (admin necesita una quinta columna con PIN). Si la cédula ya existe, se actualiza.</p>
+      <form class="stack" id="f-import-personas"><textarea class="in" name="lista" rows="8" placeholder="Laura Gómez;1012345678;IS;empleado" required></textarea>
       <div id="imp-res"></div><div class="row"><button class="btn" type="submit">Cargar</button><button class="btn out" type="button" data-act="cerrar">Cerrar</button></div></form>`);
   } else if (a === 'csv') {
     const rows = [['Nombre', 'Cedula', 'Proceso', 'Rol', 'Saldo', 'Reservado', 'Dias tomados', 'Ganados año']].concat(

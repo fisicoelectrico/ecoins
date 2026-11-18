@@ -28,7 +28,7 @@ fines de semana ni los bloqueos de la empresa. Hay cupo por proceso y anticipaci
 - Frontend estático (`index.html`, `app.js`, `styles.css`), sin dependencias, publicado en GitHub Pages.
 - Backend en Supabase (proyecto `central-ingenieria`, tablas `ec_*`).
 - Las tablas tienen RLS activo sin políticas: nadie las lee directamente. Todo pasa por funciones
-  `ec_*` con `security definer` que validan la sesión (cédula + PIN con bcrypt, token de 30 días)
+  `ec_*` con `security definer` que validan la sesión (empleados y líderes entran con la cédula; administradores con cédula + PIN bcrypt; token de 30 días)
   y aplican las reglas en el servidor.
 - La llave que aparece en `app.js` es la llave **publicable** de Supabase; es pública por diseño.
 
