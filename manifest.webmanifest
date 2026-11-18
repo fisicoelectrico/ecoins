@@ -1,0 +1,12 @@
+{
+  "name": "E-Coins · Eco Solar",
+  "short_name": "E-Coins",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F5F6F2",
+  "theme_color": "#15201B",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
