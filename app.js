@@ -38,6 +38,7 @@ const esLiderProceso = () => S.me && (S.me.persona.rol === 'lider' || S.me.perso
 const ERR = {
   SESION_INVALIDA: 'Tu sesión venció. Ingresa de nuevo.',
   CREDENCIALES: 'Cédula o PIN incorrectos.',
+  HONOR_SIN_GANAR: 'La postulación de honor es solo para quien ya fue Empleado del Mes este año.',
   ADMIN_NO_GANA: 'Los administradores que no lideran un proceso no ganan e-coins.',
   CEDULA_NO_REGISTRADA: 'Esa cédula no está registrada. Avísale a gerencia o subgerencia.',
   PIN_ADMIN_REQUERIDO: 'Un administrador necesita PIN (4 a 6 números).',
@@ -52,7 +53,6 @@ const ERR = {
   MES_FUTURO: 'No se pueden cargar logros de meses futuros.',
   EMP_YA_GANO_ESTE_ANIO: 'Esta persona ya fue Empleado del Mes este año.',
   FINAL_UNA_VEZ_AL_ANIO: 'El bono de finalista ya se cargó este año.',
-  POST_MAX_3_TRAS_GANAR: 'Quien ya ganó solo puede ser postulado 3 veces más en el año.',
   TOPE_MENSUAL: 'Supera el tope de e-coins por persona en ese mes.',
   YA_REGISTRADO: 'Ese logro ya está registrado para ese mes.',
   SALDO_INSUFICIENTE: 'No tienes e-coins suficientes (se descuentan las solicitudes pendientes).',
@@ -417,7 +417,8 @@ function vAdminRegistrar() {
           <label class="f">Empleado del Mes<select class="in" name="emp"><option value="">— Ninguno —</option>${opt(act)}</select></label>
           <label class="f">Líder del Mes<select class="in" name="lidg"><option value="">— Ninguno —</option>${opt(lideres)}</select></label>
         </div>
-        <fieldset style="border:0;margin:0;padding:0" class="stack"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Postulados (uno por proceso) · +${(A.conceptos.find((c) => c.id === 'post') || {}).cantidad || 2}</legend>
+        <fieldset style="border:0;margin:0;padding:0" class="stack"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Postulados · +${(A.conceptos.find((c) => c.id === 'post') || {}).cantidad || 2}</legend>
+          <p class="help" style="margin:0">Si la persona ya fue Empleado del Mes este año, se registra sola como <b>postulación de honor</b> (+2, sin límite de veces).</p>
           <input class="in" type="search" placeholder="Buscar nombre o proceso…" data-filtro="#grid-post .check" aria-label="Buscar postulado"><div class="grid g2" id="grid-post">${act.map((p) => `<label class="check" data-q="${esc((p.nombre + ' ' + p.proceso + ' ' + p.documento).toLowerCase())}"><input type="checkbox" name="post" value="${esc(p.documento)}"><span>${esc(p.nombre)}<span class="small" style="display:block">${esc(p.proceso)}</span></span></label>`).join('')}</div>
         </fieldset>
         <fieldset style="border:0;margin:0;padding:0" class="stack"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Líderes que cumplieron los criterios · +${(A.conceptos.find((c) => c.id === 'lidc') || {}).cantidad || 2}</legend>

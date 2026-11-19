@@ -12,11 +12,12 @@ Complementa la dinámica de Empleado del Mes y Líder del Mes.
 | Concepto | E-coins |
 | --- | --- |
 | Postulado por su proceso | 2 |
+| Postulación de honor (ya fue Empleado del Mes en el año; sin límite) | 2 |
 | Ganador Empleado del Mes | +6 (total 8) |
 | Líder que cumple criterios | 2 |
 | Ganador Líder del Mes | +4 (total 6) |
 | Racha de 3 meses | +2 |
-| Mejora o poka-yoke implementado | 2 |
+| Reconocimiento por mejora | 2 |
 | Finalista anual sin premio mayor | 16 |
 
 1 e-coin = 1 hora libre o $10.000 (configurable). Día completo = 8, medio día = 4.
