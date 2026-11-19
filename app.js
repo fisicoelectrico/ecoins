@@ -30,7 +30,8 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 const cfg = (k) => { const c = (S.admin && S.admin.config) || (S.me && S.me.config) || {}; return c[k]; };
 const cfgN = (k, def) => { const v = Number(cfg(k)); return Number.isFinite(v) ? v : def; };
 const isAdmin = () => S.me && S.me.persona.rol === 'admin';
-const isLider = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.rol === 'admin');
+const isLider = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.rol === 'admin' || S.me.persona.es_lider);
+const esLiderProceso = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.es_lider);
 
 const ERR = {
   SESION_INVALIDA: 'Tu sesión venció. Ingresa de nuevo.',
@@ -167,7 +168,7 @@ function header() {
     <nav class="tabs" aria-label="Secciones"><div class="tabs-in">
       ${t('inicio', 'Inicio')}${t('calendario', 'Pedir tiempo')}${t('solicitudes', 'Mis solicitudes')}
       ${t('avisos', 'Avisos', unread ? ` <span class="badge">${unread}</span>` : '')}
-      ${isLider() && S.me.persona.rol === 'lider' ? t('lider', 'Mi proceso', liderPend ? ` <span class="badge">${liderPend}</span>` : '') : ''}
+      ${esLiderProceso() ? t('lider', 'Mi proceso', liderPend ? ` <span class="badge">${liderPend}</span>` : '') : ''}
       ${isAdmin() ? `<span class="tab-sep" aria-hidden="true"></span>
         ${t('admin/saldos', 'Saldos y asignación')}${t('admin/solicitudes', 'Aprobar', pend ? ` <span class="badge">${pend}</span>` : '')}
         ${t('admin/registrar', 'Registrar mes')}${t('admin/calendario', 'Días y reglas')}${t('admin/personas', 'Personas')}${t('admin/historial', 'Historial')}` : ''}
@@ -356,7 +357,7 @@ function vAdminSaldos() {
       <div class="side stack">
         <form class="card stack" id="f-asg">
           <div><h2>Asignar e-coins</h2><p class="sub" style="font-size:14px">El monto lo fija el concepto. No hay e-coins regalados.</p></div>
-          <label class="f">Persona<select class="in" name="persona" data-inp="persona">${activos.map((p) => `<option value="${p.id}" ${p.id === g.persona ? 'selected' : ''}>${esc(p.nombre)} · ${esc(p.proceso)}</option>`).join('')}</select>
+          <label class="f">Persona<input class="in" type="search" placeholder="Buscar por nombre o cédula…" data-filtro-select="#sel-persona" aria-label="Buscar persona"><select class="in" id="sel-persona" name="persona" data-inp="persona">${activos.map((p) => `<option value="${p.id}" ${p.id === g.persona ? 'selected' : ''} data-q="${esc((p.nombre + ' ' + p.documento).toLowerCase())}">${esc(p.nombre)} · ${esc(p.proceso)}</option>`).join('')}</select>
             <span class="help">Saldo actual: <b>${per ? per.saldo : 0} e-coins</b></span></label>
           <fieldset style="border:0;margin:0;padding:0" class="chips"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Concepto</legend>
             ${conceptos.map((c) => `<button type="button" class="chip ${c.id === g.concepto ? 'on' : ''}" data-act="concepto" data-id="${c.id}" aria-pressed="${c.id === g.concepto}"><span>${esc(c.nombre)}</span><b>+${c.cantidad}</b></button>`).join('')}
@@ -402,7 +403,7 @@ function vAdminSolicitudes() {
 function vAdminRegistrar() {
   const A = S.admin;
   const act = A.personas.filter((p) => p.activo);
-  const lideres = act.filter((p) => p.rol === 'lider' || p.rol === 'admin');
+  const lideres = act.filter((p) => p.es_lider);
   const d = new Date(); const mesDef = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const opt = (arr) => arr.map((p) => `<option value="${esc(p.documento)}">${esc(p.nombre)} · ${esc(p.proceso)}</option>`).join('');
   return `${header()}<main><div><h1>Registrar resultados del mes</h1><p class="sub">Úsalo cada mes después del comité, y también para la carga retroactiva de 2026 (mes por mes).</p></div>
@@ -414,7 +415,7 @@ function vAdminRegistrar() {
           <label class="f">Líder del Mes<select class="in" name="lidg"><option value="">— Ninguno —</option>${opt(lideres)}</select></label>
         </div>
         <fieldset style="border:0;margin:0;padding:0" class="stack"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Postulados (uno por proceso) · +${(A.conceptos.find((c) => c.id === 'post') || {}).cantidad || 2}</legend>
-          <div class="grid g2">${act.map((p) => `<label class="check"><input type="checkbox" name="post" value="${esc(p.documento)}"><span>${esc(p.nombre)}<span class="small" style="display:block">${esc(p.proceso)}</span></span></label>`).join('')}</div>
+          <input class="in" type="search" placeholder="Buscar nombre o proceso…" data-filtro="#grid-post .check" aria-label="Buscar postulado"><div class="grid g2" id="grid-post">${act.map((p) => `<label class="check" data-q="${esc((p.nombre + ' ' + p.proceso + ' ' + p.documento).toLowerCase())}"><input type="checkbox" name="post" value="${esc(p.documento)}"><span>${esc(p.nombre)}<span class="small" style="display:block">${esc(p.proceso)}</span></span></label>`).join('')}</div>
         </fieldset>
         <fieldset style="border:0;margin:0;padding:0" class="stack"><legend style="font-weight:600;font-size:14px;margin-bottom:8px">Líderes que cumplieron los criterios · +${(A.conceptos.find((c) => c.id === 'lidc') || {}).cantidad || 2}</legend>
           ${lideres.length ? `<div class="grid g2">${lideres.map((p) => `<label class="check"><input type="checkbox" name="lidc" value="${esc(p.documento)}"><span>${esc(p.nombre)}<span class="small" style="display:block">${esc(p.proceso)}</span></span></label>`).join('')}</div>` : '<p class="help">No hay personas con rol Líder. Asígnalo en Personas.</p>'}
@@ -465,10 +466,11 @@ function vAdminCalendario() {
 
 function vAdminPersonas() {
   const A = S.admin;
-  return `${header()}<main><div class="row between"><div><h1>Personas</h1><p class="sub">${A.personas.filter((p) => p.activo).length} activas · cada persona entra con su cédula y su PIN.</p></div>
+  return `${header()}<main><div class="row between"><div><h1>Personas</h1><p class="sub">${A.personas.filter((p) => p.activo).length} activas · empleados y líderes entran con la cédula; administradores con cédula y PIN.</p></div>
     <div class="row"><button class="btn out sm" data-act="import-personas">Cargar lista</button><button class="btn sm" data-act="persona-nueva">Agregar persona</button></div></div>
-    <section class="card p0"><div class="tbl-wrap"><table style="min-width:640px"><thead><tr><th>Nombre</th><th>Cédula</th><th>Proceso</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>
-      ${A.personas.map((p) => `<tr><td><b>${esc(p.nombre)}</b></td><td>${esc(p.documento)}</td><td>${esc(p.proceso)}</td><td>${esc(rolTxt(p.rol))}</td>
+    <input class="in" type="search" placeholder="Buscar por nombre, cédula o proceso…" data-filtro="#tbl-personas tbody tr" aria-label="Buscar persona" style="max-width:420px">
+    <section class="card p0"><div class="tbl-wrap"><table id="tbl-personas" style="min-width:640px"><thead><tr><th>Nombre</th><th>Cédula</th><th>Proceso</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${A.personas.map((p) => `<tr data-q="${esc((p.nombre + ' ' + p.documento + ' ' + p.proceso).toLowerCase())}"><td><b>${esc(p.nombre)}</b></td><td>${esc(p.documento)}</td><td>${esc(p.proceso)}</td><td>${esc(rolTxt(p.rol))}${p.rol === 'admin' && p.es_lider ? ' · Líder' : ''}</td>
         <td>${p.activo ? (p.rol === 'admin' && p.debe_cambiar_pin ? '<span class="pill pend">PIN temporal</span>' : '<span class="pill ok">Activo</span>') : '<span class="pill can">Inactivo</span>'}</td>
         <td class="n" style="white-space:nowrap"><button class="btn out sm" data-act="persona-editar" data-id="${p.id}">Editar</button>${p.rol === 'admin' ? ` <button class="btn out sm" data-act="persona-pin" data-id="${p.id}">Nuevo PIN</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div></section></main>`;
@@ -604,7 +606,7 @@ document.addEventListener('submit', async (ev) => {
   } else if (f.id === 'f-persona') {
     const id = f.dataset.id || null;
     await busy(btn, async () => {
-      await rpc('ec_admin_persona_guardar', { p_token: S.token, p_id: id, p_nombre: fd.get('nombre'), p_documento: fd.get('documento'), p_proceso: fd.get('proceso'), p_rol: fd.get('rol'), p_activo: fd.get('activo') === 'on', p_pin: fd.get('pin') || null });
+      await rpc('ec_admin_persona_guardar', { p_token: S.token, p_id: id, p_nombre: fd.get('nombre'), p_documento: fd.get('documento'), p_proceso: fd.get('proceso'), p_rol: fd.get('rol'), p_activo: fd.get('activo') === 'on', p_pin: fd.get('pin') || null, p_es_lider: fd.get('es_lider') === 'on' });
       closeModal(); toast(id ? 'Persona actualizada' : 'Persona creada'); await refrescar(); render();
     });
   } else if (f.id === 'f-resetpin') {
@@ -643,6 +645,25 @@ function resultadoCarga(r) {
 document.addEventListener('input', (ev) => {
   const el = ev.target;
   if (el.dataset.inp === 'filtro') { S.asg.filtro = el.value; const pos = el.selectionStart; render().then(() => { const q = $('#q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }); }
+});
+
+const sinTildes = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+document.addEventListener('input', (ev) => {
+  const el = ev.target;
+  const q = sinTildes(el.value).trim();
+  if (el.dataset.filtro) {
+    document.querySelectorAll(el.dataset.filtro).forEach((n) => { n.style.display = !q || sinTildes(n.dataset.q || n.textContent).includes(q) ? '' : 'none'; });
+  }
+  if (el.dataset.filtroSelect) {
+    const sel = document.querySelector(el.dataset.filtroSelect);
+    if (!sel) return;
+    if (!sel._todas) sel._todas = Array.from(sel.options).map((o) => o.cloneNode(true));
+    const actual = sel.value;
+    const visibles = sel._todas.filter((o) => !q || sinTildes(o.dataset.q || o.textContent).includes(q));
+    sel.replaceChildren(...visibles.map((o) => o.cloneNode(true)));
+    if (visibles.some((o) => o.value === actual)) sel.value = actual;
+    else if (visibles.length) { sel.value = visibles[0].value; S.asg.persona = visibles[0].value; }
+  }
 });
 document.addEventListener('change', (ev) => {
   const el = ev.target;
@@ -722,6 +743,7 @@ document.addEventListener('click', async (ev) => {
       <label class="f">Proceso<input class="in" name="proceso" list="dl-proc" required value="${esc(p ? p.proceso : '')}"><datalist id="dl-proc">${procesos().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
       <label class="f">Rol<select class="in" name="rol">${['empleado', 'lider', 'admin'].map((r) => `<option value="${r}" ${p && p.rol === r ? 'selected' : ''}>${rolTxt(r)}</option>`).join('')}</select></label>
       <label class="f">PIN (solo para administradores)<input class="in" name="pin" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}"><span class="help">Empleados y líderes entran solo con la cédula. Un administrador nuevo necesita PIN temporal.</span></label>
+      <label class="check"><input type="checkbox" name="es_lider" ${p && p.es_lider ? 'checked' : ''}><span>Es líder de su proceso<span class="small" style="display:block">Aparece en Líderes del Mes y da visto bueno a su proceso, aunque sea administrador.</span></span></label>
       <label class="check"><input type="checkbox" name="activo" ${!p || p.activo ? 'checked' : ''}><span>Activo</span></label>
       <div class="row"><button class="btn" type="submit">Guardar</button><button class="btn out" type="button" data-act="cerrar">Cancelar</button></div></form>`);
   } else if (a === 'persona-pin') {
