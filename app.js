@@ -31,11 +31,14 @@ const cfg = (k) => { const c = (S.admin && S.admin.config) || (S.me && S.me.conf
 const cfgN = (k, def) => { const v = Number(cfg(k)); return Number.isFinite(v) ? v : def; };
 const isAdmin = () => S.me && S.me.persona.rol === 'admin';
 const isLider = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.rol === 'admin' || S.me.persona.es_lider);
+const ganaEcoins = (p) => p.rol !== 'admin' || p.es_lider;
+const soloAdmin = () => S.me && S.me.persona.rol === 'admin' && !S.me.persona.es_lider;
 const esLiderProceso = () => S.me && (S.me.persona.rol === 'lider' || S.me.persona.es_lider);
 
 const ERR = {
   SESION_INVALIDA: 'Tu sesión venció. Ingresa de nuevo.',
   CREDENCIALES: 'Cédula o PIN incorrectos.',
+  ADMIN_NO_GANA: 'Los administradores que no lideran un proceso no ganan e-coins.',
   CEDULA_NO_REGISTRADA: 'Esa cédula no está registrada. Avísale a gerencia o subgerencia.',
   PIN_ADMIN_REQUERIDO: 'Un administrador necesita PIN (4 a 6 números).',
   BLOQUEADO_TEMPORAL: 'Demasiados intentos. Espera 10 minutos.',
@@ -166,7 +169,7 @@ function header() {
       <button class="btn-ghost-dark" data-act="salir">Salir</button></div>
     </div></header>
     <nav class="tabs" aria-label="Secciones"><div class="tabs-in">
-      ${t('inicio', 'Inicio')}${t('calendario', 'Pedir tiempo')}${t('solicitudes', 'Mis solicitudes')}
+      ${soloAdmin() ? '' : `${t('inicio', 'Inicio')}${t('calendario', 'Pedir tiempo')}${t('solicitudes', 'Mis solicitudes')}`}
       ${t('avisos', 'Avisos', unread ? ` <span class="badge">${unread}</span>` : '')}
       ${esLiderProceso() ? t('lider', 'Mi proceso', liderPend ? ` <span class="badge">${liderPend}</span>` : '') : ''}
       ${isAdmin() ? `<span class="tab-sep" aria-hidden="true"></span>
@@ -324,14 +327,14 @@ function vAdminSaldos() {
   const A = S.admin, k = A.kpis, g = S.asg;
   const conceptos = A.conceptos.filter((c) => c.activo);
   if (!g.mes) { const d = new Date(); g.mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-  const activos = A.personas.filter((p) => p.activo);
+  const activos = A.personas.filter((p) => p.activo && ganaEcoins(p));
   if (!g.persona && activos.length) g.persona = activos[0].id;
   const per = A.personas.find((p) => p.id === g.persona);
   const con = conceptos.find((c) => c.id === g.concepto) || conceptos[0];
   const extra = (g.concepto === 'emp' ? 'post' : g.concepto === 'lidg' ? 'lidc' : null);
   const extraC = extra ? conceptos.find((c) => c.id === extra) : null;
   const f = g.filtro.toLowerCase();
-  const lista = A.personas.filter((p) => (!f || p.nombre.toLowerCase().includes(f) || p.documento.includes(f)) && (!g.proceso || p.proceso === g.proceso));
+  const lista = A.personas.filter((p) => ganaEcoins(p) && (!f || p.nombre.toLowerCase().includes(f) || p.documento.includes(f)) && (!g.proceso || p.proceso === g.proceso));
   return `${header()}<main>
     <div class="row between"><div><h1>Saldos del equipo</h1><p class="sub">1 e-coin = 1 hora libre o ${money(cfgN('valor_ecoin', 10000))} · Día completo = ${cfgN('costo_dia', 8)} e-coins</p></div>
       <button class="btn out sm" data-act="csv">Descargar CSV</button></div>
@@ -402,7 +405,7 @@ function vAdminSolicitudes() {
 
 function vAdminRegistrar() {
   const A = S.admin;
-  const act = A.personas.filter((p) => p.activo);
+  const act = A.personas.filter((p) => p.activo && ganaEcoins(p));
   const lideres = act.filter((p) => p.es_lider);
   const d = new Date(); const mesDef = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const opt = (arr) => arr.map((p) => `<option value="${esc(p.documento)}">${esc(p.nombre)} · ${esc(p.proceso)}</option>`).join('');
@@ -497,6 +500,7 @@ async function render() {
   if (S.me.persona.debe_cambiar_pin) { app.innerHTML = vCambiarPin(true); return; }
   const r = route();
   if (r.startsWith('admin') && !isAdmin()) { location.hash = '#/inicio'; return; }
+  if (soloAdmin() && ['inicio', 'calendario', 'solicitudes', 'lider'].includes(r)) { location.hash = '#/admin/saldos'; return; }
   let html;
   switch (r) {
     case 'calendario': if (!S.cal.dias.length) { try { await calCargar(); } catch (e) { toast(e.message, true); } } html = vCalendario(); break;
