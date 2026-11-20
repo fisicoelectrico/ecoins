@@ -14,6 +14,7 @@ const S = {
   asg: { persona: null, concepto: 'post', mes: null, filtro: '', proceso: '' },
   lider: [],
   historial: null,
+  tard: null,
 };
 
 /* ---------- utilidades ---------- */
@@ -39,6 +40,8 @@ const ERR = {
   SESION_INVALIDA: 'Tu sesión venció. Ingresa de nuevo.',
   CREDENCIALES: 'Cédula o PIN incorrectos.',
   HONOR_SIN_GANAR: 'La postulación de honor es solo para quien ya fue Empleado del Mes este año.',
+  FECHA_FUTURA: 'La fecha no puede ser futura.',
+  TARDANZA_DUPLICADA: 'Ya hay una llegada tarde registrada ese día para esa persona.',
   ADMIN_NO_GANA: 'Los administradores que no lideran un proceso no ganan e-coins.',
   CEDULA_NO_REGISTRADA: 'Esa cédula no está registrada. Avísale a gerencia o subgerencia.',
   PIN_ADMIN_REQUERIDO: 'Un administrador necesita PIN (4 a 6 números).',
@@ -174,7 +177,7 @@ function header() {
       ${esLiderProceso() ? t('lider', 'Mi proceso', liderPend ? ` <span class="badge">${liderPend}</span>` : '') : ''}
       ${isAdmin() ? `<span class="tab-sep" aria-hidden="true"></span>
         ${t('admin/saldos', 'Saldos y asignación')}${t('admin/solicitudes', 'Aprobar', pend ? ` <span class="badge">${pend}</span>` : '')}
-        ${t('admin/registrar', 'Registrar mes')}${t('admin/calendario', 'Días y reglas')}${t('admin/personas', 'Personas')}${t('admin/historial', 'Historial')}` : ''}
+        ${t('admin/registrar', 'Registrar mes')}${t('admin/calendario', 'Días y reglas')}${t('admin/tardanzas', 'Llegadas tarde')}${t('admin/personas', 'Personas')}${t('admin/historial', 'Historial')}` : ''}
       ${isAdmin() ? t('pin', 'Cambiar PIN') : ''}
     </div></nav>`;
 }
@@ -187,6 +190,7 @@ const movTxt = (m) => {
   if (m.tipo === 'canje_tiempo') return m.sustento || 'Tiempo libre';
   if (m.tipo === 'canje_dinero') return 'Canje en dinero';
   if (m.tipo === 'ajuste') return 'Corrección: ' + (m.sustento || '');
+  if (m.tipo === 'descuento') return m.sustento || 'Llegada tarde';
   return m.tipo;
 };
 const solTxt = (s) => s.tipo === 'dia' ? 'Día completo' : s.tipo === 'medio' ? 'Medio día' : 'Canje en dinero';
@@ -480,6 +484,41 @@ function vAdminPersonas() {
     </tbody></table></div></section></main>`;
 }
 
+
+function vAdminTardanzas() {
+  const T = S.tard, A = S.admin;
+  if (!T) return `${header()}<main><div class="empty"><span class="spin"></span></div></main>`;
+  const act = A.personas.filter((p) => p.activo && ganaEcoins(p));
+  const hoy = iso(new Date());
+  const estado = (t) => t.justificada ? '<span class="pill can">Justificada</span>' : t.descontada ? `<span class="pill no">−${T.descuento} descontado</span>` : '<span class="pill pend">Sin descuento</span>';
+  return `${header()}<main><div><h1>Llegadas tarde</h1><p class="sub">Cada llegada tarde resta ${T.descuento} e-coin, sin importar cuánto tiempo. Solo descuenta las que estén desde la fecha de inicio y con la regla encendida.</p></div>
+    <div class="grid g3" style="align-items:start">
+      <form class="card stack" id="f-tard-cfg"><h2>Regla</h2>
+        <label class="check"><input type="checkbox" name="activo" ${T.activo ? 'checked' : ''}><span><b>Descontar e-coins por llegadas tarde</b><span class="small" style="display:block">Al encenderla se descuentan también las ya registradas desde la fecha de inicio.</span></span></label>
+        <label class="f">Empieza a descontar desde<input class="in" type="date" name="desde" value="${esc(T.desde || '')}" max="${hoy}" required></label>
+        <div class="note">${T.activo && T.desde ? `Encendida desde el <b>${fDate(T.desde)}</b>.` : 'Apagada: las llegadas tarde se registran pero no descuentan.'}</div>
+        <button class="btn" type="submit">Guardar regla</button>
+      </form>
+      <form class="card stack" id="f-tard"><h2>Registrar una</h2>
+        <label class="f">Persona<input class="in" type="search" placeholder="Buscar por nombre o cédula…" data-filtro-select="#sel-tard" aria-label="Buscar persona"><select class="in" id="sel-tard" name="persona">${act.map((p) => `<option value="${p.id}" data-q="${esc((p.nombre + ' ' + p.documento).toLowerCase())}">${esc(p.nombre)} · ${esc(p.proceso)}</option>`).join('')}</select></label>
+        <label class="f">Fecha<input class="in" type="date" name="fecha" value="${hoy}" max="${hoy}" required></label>
+        <label class="f">Nota (opcional)<input class="in" name="nota" placeholder="Ej.: llegó 7:25"></label>
+        <button class="btn" type="submit">Registrar llegada tarde</button>
+      </form>
+      <form class="card stack" id="f-tard-lista"><h2>Pegar varias</h2>
+        <p class="help" style="margin:0">Una por línea, desde Excel o el reporte de asistencia: <code>cédula;AAAA-MM-DD;nota</code></p>
+        <textarea class="in" name="lista" rows="7" placeholder="1003232466;2026-11-12;7:20" required></textarea>
+        <button class="btn out" type="submit">Cargar lista</button><div id="tard-res"></div>
+      </form>
+    </div>
+    <input class="in" type="search" placeholder="Buscar en el registro…" data-filtro="#tbl-tard tbody tr" aria-label="Buscar en el registro" style="max-width:420px">
+    <section class="card p0"><div class="tbl-wrap"><table id="tbl-tard" style="min-width:720px"><thead><tr><th>Fecha</th><th>Persona</th><th>Nota</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${T.lista.map((t) => `<tr data-q="${esc((t.nombre + ' ' + t.documento + ' ' + t.proceso + ' ' + t.fecha).toLowerCase())}"><td>${fDate(t.fecha, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</td><td><b>${esc(t.nombre)}</b><div class="small">${esc(t.proceso)}</div></td><td class="small">${esc(t.nota || '')}</td><td>${estado(t)}</td>
+        <td class="n" style="white-space:nowrap"><button class="btn out sm" data-act="tard-just" data-id="${t.id}" data-v="${t.justificada ? '0' : '1'}">${t.justificada ? 'Quitar justificación' : 'Justificar'}</button> <button class="btn danger sm" data-act="tard-borrar" data-id="${t.id}">Anular</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No hay llegadas tarde registradas.</td></tr>'}
+    </tbody></table></div></section></main>`;
+}
+async function cargarTard() { S.tard = await rpc('ec_admin_tardanzas', { p_token: S.token }); }
+
 function vAdminHistorial() {
   const h = S.historial;
   return `${header()}<main><div><h1>Historial de movimientos</h1><p class="sub">Últimos 300 movimientos con quién los registró. Sirve de soporte para auditoría.</p></div>
@@ -514,6 +553,9 @@ async function render() {
     case 'admin/registrar': html = vAdminRegistrar(); break;
     case 'admin/calendario': html = vAdminCalendario(); break;
     case 'admin/personas': html = vAdminPersonas(); break;
+    case 'admin/tardanzas':
+      if (!S.tard) { try { await cargarTard(); } catch (e) { toast(e.message, true); } }
+      html = vAdminTardanzas(); break;
     case 'admin/historial':
       html = vAdminHistorial();
       if (S.historial === null) { rpc('ec_admin_historial', { p_token: S.token }).then((h) => { S.historial = h || []; if (route() === 'admin/historial') render(); }).catch((e) => toast(e.message, true)); }
@@ -634,6 +676,23 @@ document.addEventListener('submit', async (ev) => {
     await busy(btn, async () => {
       await rpc('ec_solicitar_dinero', { p_token: S.token, p_cantidad: n });
       closeModal(); toast('Solicitud de canje enviada'); await refrescar(); render();
+    });
+  } else if (f.id === 'f-tard-cfg') {
+    await busy(btn, async () => {
+      await rpc('ec_admin_config_guardar', { p_token: S.token, p_clave: 'tardanzas_desde', p_valor: fd.get('desde') });
+      await rpc('ec_admin_config_guardar', { p_token: S.token, p_clave: 'tardanzas_activo', p_valor: fd.get('activo') === 'on' });
+      toast('Regla guardada'); await cargarTard(); await refrescar(); render();
+    });
+  } else if (f.id === 'f-tard' || f.id === 'f-tard-lista') {
+    const filas = f.id === 'f-tard'
+      ? [{ persona_id: fd.get('persona'), fecha: fd.get('fecha'), nota: fd.get('nota') }]
+      : String(fd.get('lista') || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const [documento, fecha, ...n] = l.split(/[;\t,]/); return { documento: (documento || '').trim(), fecha: (fecha || '').trim(), nota: n.join(' ').trim() }; });
+    if (!filas.length) return;
+    await busy(btn, async () => {
+      const r = await rpc('ec_admin_tardanzas_registrar', { p_token: S.token, p_filas: filas });
+      await cargarTard(); await refrescar(); render();
+      toast(`${r.ok} registradas · ${r.descontadas} con descuento`);
+      if (r.errores.length) { const box = $('#tard-res'); if (box) box.innerHTML = `<div class="err">${r.errores.map((e) => `${esc(e.documento || '')} ${esc(e.fecha || '')}: ${esc(traducir(e.error))}`).join('<br>')}</div>`; else toast(traducir(r.errores[0].error), true); }
     });
   } else if (f.id === 'f-rechazo') {
     await busy(btn, async () => {
@@ -760,6 +819,11 @@ document.addEventListener('click', async (ev) => {
     modal(`<h2>Cargar lista de personas</h2><p class="help" style="margin:0">Pega desde Excel una persona por línea con columnas: <b>nombre; cédula; proceso; rol</b>. Rol: empleado, lider o admin (admin necesita una quinta columna con PIN). Si la cédula ya existe, se actualiza.</p>
       <form class="stack" id="f-import-personas"><textarea class="in" name="lista" rows="8" placeholder="Laura Gómez;1012345678;IS;empleado" required></textarea>
       <div id="imp-res"></div><div class="row"><button class="btn" type="submit">Cargar</button><button class="btn out" type="button" data-act="cerrar">Cerrar</button></div></form>`);
+  } else if (a === 'tard-just') {
+    await busy(el, async () => { await rpc('ec_admin_tardanza_justificar', { p_token: S.token, p_id: Number(el.dataset.id), p_justificada: el.dataset.v === '1' }); await cargarTard(); await refrescar(); render(); });
+  } else if (a === 'tard-borrar') {
+    if (!confirmar('¿Anular este registro de llegada tarde? Si ya se descontó, se devuelve el e-coin.')) return;
+    await busy(el, async () => { await rpc('ec_admin_tardanza_borrar', { p_token: S.token, p_id: Number(el.dataset.id) }); await cargarTard(); await refrescar(); render(); });
   } else if (a === 'csv') {
     const rows = [['Nombre', 'Cedula', 'Proceso', 'Rol', 'Saldo', 'Reservado', 'Dias tomados', 'Ganados año']].concat(
       S.admin.personas.map((p) => [p.nombre, p.documento, p.proceso, rolTxt(p.rol), p.saldo, p.comprometido, p.dias, p.ganados_anio]));
