@@ -490,8 +490,8 @@ function vAdminTardanzas() {
   if (!T) return `${header()}<main><div class="empty"><span class="spin"></span></div></main>`;
   const act = A.personas.filter((p) => p.activo && ganaEcoins(p));
   const hoy = iso(new Date());
-  const estado = (t) => t.justificada ? '<span class="pill can">Justificada</span>' : t.descontada ? `<span class="pill no">−${T.descuento} descontado</span>` : '<span class="pill pend">Sin descuento</span>';
-  return `${header()}<main><div><h1>Llegadas tarde</h1><p class="sub">Cada llegada tarde resta ${T.descuento} e-coin, sin importar cuánto tiempo. Solo descuenta las que estén desde la fecha de inicio y con la regla encendida.</p></div>
+  const estado = (t) => t.justificada ? '<span class="pill can">Justificada</span>' : t.descontada ? `<span class="pill no">−${T.descuento} descontado</span>` : t.sin_saldo ? '<span class="pill can">Sin e-coins · va por nómina</span>' : '<span class="pill pend">Sin descuento</span>';
+  return `${header()}<main><div><h1>Llegadas tarde</h1><p class="sub">Cada llegada tarde resta ${T.descuento} e-coin, sin importar cuánto tiempo, desde la fecha de inicio y con la regla encendida. A quien no tiene e-coins no se le descuenta nada (se maneja por nómina) y tampoco se le cobra después.</p></div>
     <div class="grid g3" style="align-items:start">
       <form class="card stack" id="f-tard-cfg"><h2>Regla</h2>
         <label class="check"><input type="checkbox" name="activo" ${T.activo ? 'checked' : ''}><span><b>Descontar e-coins por llegadas tarde</b><span class="small" style="display:block">Al encenderla se descuentan también las ya registradas desde la fecha de inicio.</span></span></label>
